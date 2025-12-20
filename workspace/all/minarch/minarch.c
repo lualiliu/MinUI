@@ -44,7 +44,7 @@ enum {
 };
 
 // default frontend options
-static int screen_scaling = SCALE_ASPECT;
+static int screen_scaling = SCALE_FULLSCREEN;
 static int screen_sharpness = SHARPNESS_SOFT;
 static int screen_effect = EFFECT_NONE;
 static int prevent_tearing = 1; // lenient
@@ -2930,7 +2930,8 @@ void Core_open(const char* core_path, const char* tag_name) {
 	
 	Core_getName((char*)core_path, (char*)core.name);
 	sprintf((char*)core.version, "%s (%s)", info.library_name, info.library_version);
-	strcpy((char*)core.tag, tag_name);
+	strncpy((char*)core.tag, tag_name, 7);
+	((char*)core.tag)[7] = '\0'; // ensure null termination
 	strcpy((char*)core.extensions, info.valid_extensions);
 	
 	core.need_fullpath = info.need_fullpath;
@@ -4685,9 +4686,9 @@ int main(int argc , char* argv[]) {
 
 	screen = GFX_init(MODE_MENU);
 	PAD_init();
-	DEVICE_WIDTH = screen->w;
-	DEVICE_HEIGHT = screen->h;
-	DEVICE_PITCH = screen->pitch;
+	DEVICE_WIDTH = 1280/1.5;
+	DEVICE_HEIGHT = 720/1.5;
+	DEVICE_PITCH = DEVICE_WIDTH*2;
 	// LOG_info("DEVICE_SIZE: %ix%i (%i)\n", DEVICE_WIDTH,DEVICE_HEIGHT,DEVICE_PITCH);
 	
 	VIB_init();

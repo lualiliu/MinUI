@@ -97,6 +97,25 @@ void getEmuName(const char* in_name, char* out_name) { // NOTE: both char arrays
 		tmp = strchr(out_name,')');
 		tmp[0] = '\0';
 	}
+	else {
+		// fallback: if path doesn't match ROMS_PATH and has no parens,
+		// extract filename without extension as a safe tag name
+		// This handles test/development scenarios with absolute paths
+		char check_path[MAX_PATH];
+		strcpy(check_path, in_name);
+		if (!prefixMatch(ROMS_PATH, check_path)) {
+			tmp = strrchr(out_name, '/');
+			if (tmp) {
+				strcpy(out_name, tmp + 1);
+				tmp = out_name;
+			}
+			// remove extension
+			tmp = strrchr(out_name, '.');
+			if (tmp) tmp[0] = '\0';
+			// limit to reasonable length to prevent buffer overflow
+			if (strlen(out_name) > 64) out_name[64] = '\0';
+		}
+	}
 	
 	// printf(" out_name: %s\n", out_name); fflush(stdout);
 }

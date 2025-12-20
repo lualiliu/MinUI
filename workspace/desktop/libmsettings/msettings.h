@@ -24,3 +24,4 @@ void SetMute(int value); // 0-1
 
 #endif  // __msettings_h__
 
+
