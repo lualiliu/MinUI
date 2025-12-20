@@ -8,9 +8,7 @@ ifeq (,$(PLATFORM))
 	$(error please specify PLATFORM, eg. PLATFORM=trimui make)
 endif
 
-ifeq (,$(CROSS_COMPILE))
-	$(error missing CROSS_COMPILE for this toolchain)
-endif
+CROSS_COMPILE ?=
 
 ###########################################################
 
@@ -20,7 +18,7 @@ SDL?=SDL
 ###########################################################
 
 TARGET = minarch
-INCDIR = -I. -I./libretro-common/include/ -I../common/ -I../../$(PLATFORM)/platform/
+INCDIR = -I. -I./libretro-common/include/ -I../common/ -I../../$(PLATFORM)/platform/ -I../../$(PLATFORM)/libmsettings/
 SOURCE = $(TARGET).c ../common/scaler.c ../common/utils.c ../common/api.c ../../$(PLATFORM)/platform/platform.c
 
 CC = $(CROSS_COMPILE)gcc
@@ -50,4 +48,4 @@ libretro-common:
 	git clone https://github.com/libretro/libretro-common
 	
 $(PREFIX)/include/msettings.h:
-	cd /root/workspace/$(PLATFORM)/libmsettings && make
+	cd ../../$(PLATFORM)/libmsettings && $(MAKE) build

@@ -1,0 +1,2 @@
+include ../../all/cores/makefile
+
