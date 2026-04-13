@@ -943,6 +943,7 @@ static struct SND_Context {
 	
 	SND_Resampler resample;
 } snd = {0};
+static int snd_buffer_seconds_pref = 5;
 static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // plat_sound_callback
 	
 	// return (void)memset(stream,0,len); // TODO: tmp, silent
@@ -998,6 +999,15 @@ static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 	
 	SDL_UnlockAudio();
 }
+void SND_setBufferSeconds(int seconds) {
+	if (seconds < 1) seconds = 1;
+	if (seconds > 12) seconds = 12;
+	snd_buffer_seconds_pref = seconds;
+	if (snd.initialized) {
+		snd.buffer_seconds = snd_buffer_seconds_pref;
+		SND_resizeBuffer();
+	}
+}
 static int SND_resampleNone(SND_Frame frame) { // audio_resample_passthrough
 	snd.buffer[snd.frame_in++] = frame;
 	if (snd.frame_in >= snd.frame_count) snd.frame_in = 0;
@@ -1051,6 +1061,15 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 			SDL_LockAudio();
 		}
 		// if (tries) LOG_info("%8i waited %ims for buffer to get low...\n", ms(), tries);
+		if (snd.frame_in==snd.frame_filled) {
+			// Audio callback stalled or too slow: drop this chunk to avoid
+			// blocking retro_run indefinitely (observed as "freeze").
+			// Drop the remaining batch at once so we do not repeatedly wait
+			// ~10ms per chunk and drift into heavy slowdowns.
+			consumed += frame_count;
+			frame_count = 0;
+			break;
+		}
 
 		while (amount && snd.frame_in != snd.frame_filled) {
 			consumed_frames = snd.resample(*frames);
@@ -1068,32 +1087,62 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 
 void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	LOG_info("SND_init\n");
-	
-	SDL_InitSubSystem(SDL_INIT_AUDIO);
-	
+
 #if defined(USE_SDL2)
+	SDL_InitSubSystem(SDL_INIT_AUDIO);
 	LOG_info("Available audio drivers:\n");
 	for (int i=0; i<SDL_GetNumAudioDrivers(); i++) {
 		LOG_info("- %s\n", SDL_GetAudioDriver(i));
 	}
 	LOG_info("Current audio driver: %s\n", SDL_GetCurrentAudioDriver());
-#endif	
+#endif
 	
 	memset(&snd, 0, sizeof(struct SND_Context));
 	snd.frame_rate = frame_rate;
 
 	SDL_AudioSpec spec_in;
-	SDL_AudioSpec spec_out;
+	SDL_AudioSpec spec_out = {0};
 
 	spec_in.freq = PLAT_pickSampleRate(sample_rate, MAX_SAMPLE_RATE);
 	spec_in.format = AUDIO_S16;
 	spec_in.channels = 2;
 	spec_in.samples = SAMPLES;
 	spec_in.callback = SND_audioCallback;
+
+	int opened = 0;
+#if !defined(USE_SDL2)
+	char audio_driver[64] = {0};
+	char* configured_driver = getenv("SDL_AUDIODRIVER");
+	if (configured_driver && configured_driver[0]) {
+		SDL_InitSubSystem(SDL_INIT_AUDIO);
+		opened = (SDL_OpenAudio(&spec_in, &spec_out) == 0);
+		if (!opened) LOG_info("SDL_OpenAudio error (%s): %s\n", configured_driver, SDL_GetError());
+	}
+	else {
+		const char* fallback_drivers[] = {"alsa", "pulse", "dsp", NULL};
+		for (int i=0; fallback_drivers[i]; i++) {
+			setenv("SDL_AUDIODRIVER", fallback_drivers[i], 1);
+			SDL_InitSubSystem(SDL_INIT_AUDIO);
+			if (SDL_OpenAudio(&spec_in, &spec_out) == 0) {
+				opened = 1;
+				break;
+			}
+			LOG_info("SDL_OpenAudio error (%s): %s\n", fallback_drivers[i], SDL_GetError());
+			SDL_QuitSubSystem(SDL_INIT_AUDIO);
+		}
+	}
+	SDL_AudioDriverName(audio_driver, sizeof(audio_driver));
+	LOG_info("Current audio driver: %s\n", audio_driver[0] ? audio_driver : "(unknown)");
+#else
+	opened = (SDL_OpenAudio(&spec_in, &spec_out) == 0);
+	if (!opened) LOG_info("SDL_OpenAudio error: %s\n", SDL_GetError());
+#endif
+	if (!opened) {
+		LOG_warn("Audio disabled: failed to initialize backend\n");
+		return;
+	}
 	
-	if (SDL_OpenAudio(&spec_in, &spec_out)<0) LOG_info("SDL_OpenAudio error: %s\n", SDL_GetError());
-	
-	snd.buffer_seconds = 5;
+	snd.buffer_seconds = snd_buffer_seconds_pref;
 	snd.sample_rate_in  = sample_rate;
 	snd.sample_rate_out = spec_out.freq;
 	

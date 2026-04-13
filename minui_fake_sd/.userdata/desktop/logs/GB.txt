@@ -1,0 +1,88 @@
+[INFO] MinArch
+[INFO] rom_path: /mnt/minui_fake_sd/Roms/Game Boy (GB)/242.gb
+[INFO] /mnt/minui_fake_sd/.system/res[INFO] Core_open
+[INFO] core: gambatte version: Gambatte (v0.5.0-netlink ac3d17d) tag: GB (valid_extensions: gb|gbc|dmg need_fullpath: 0)
+[INFO] OptionList_init
+[INFO] Game_open
+[INFO] Config_load
+[INFO] config.device_tag (null)
+[INFO] Config_getPath /mnt/minui_fake_sd/.userdata/desktop/GB-gambatte/242.gb.cfg
+[INFO] Config_getPath /mnt/minui_fake_sd/.userdata/desktop/GB-gambatte/minarch.cfg
+[INFO] Config_init
+[INFO] 	bind Up (UP) 0:4
+[INFO] 	bind Down (DOWN) 1:5
+[INFO] 	bind Left (LEFT) 2:6
+[INFO] 	bind Right (RIGHT) 3:7
+[INFO] 	bind Select (SELECT) 9:2
+[INFO] 	bind Start (START) 8:3
+[INFO] 	bind A Button (A) 4:8
+[INFO] 	bind B Button (B) 5:0
+[INFO] 	bind A Turbo (NONE) -1:9
+[INFO] 	bind B Turbo (NONE) -1:1
+[INFO] 	bind Prev. Palette (NONE) -1:10
+[INFO] 	bind Next Palette (NONE) -1:11
+[INFO] Config_readOptions
+[INFO] Config_readOptions
+[INFO] Core_init
+[INFO] Core_load
+[INFO] game path: /mnt/minui_fake_sd/Roms/Game Boy (GB)/242.gb (131072)
+[INFO] [Gambatte] Rumble environment supported.
+[INFO] Input_init
+---------------------------------
+PRESENT    : D-Pad Left
+PRESENT    : D-Pad Up
+PRESENT    : D-Pad Down
+PRESENT    : D-Pad Right
+PRESENT    : B
+PRESENT    : A
+PRESENT    : Turbo B
+PRESENT    : Turbo A
+PRESENT    : Select
+PRESENT    : Start
+PRESENT    : Prev. Internal Palette
+PRESENT    : Next Internal Palette
+---------------------------------
+[INFO] DEFAULT D-Pad Up (Up): <UP>
+[INFO] DEFAULT D-Pad Down (Down): <DOWN>
+[INFO] DEFAULT D-Pad Left (Left): <LEFT>
+[INFO] DEFAULT D-Pad Right (Right): <RIGHT>
+[INFO] DEFAULT A (A Button): <A>
+[INFO] DEFAULT B (B Button): <B>
+[INFO] DEFAULT Turbo A (X Button): <X>
+[INFO] DEFAULT Turbo B (Y Button): <Y>
+[INFO] DEFAULT Start (Start): <START>
+[INFO] DEFAULT Select (Select): <SELECT>
+[INFO] DEFAULT Prev. Internal Palette (L1 Button): <L1>
+[INFO] DEFAULT Next Internal Palette (R1 Button): <R1>
+[INFO] DEFAULT (null) (L2 Button): <L2>
+[INFO] DEFAULT (null) (R2 Button): <R2>
+[INFO] DEFAULT (null) (L3 Button): <L3>
+[INFO] DEFAULT (null) (R3 Button): <R3>
+---------------------------------
+[INFO] Up: <UP> (0:4)
+[INFO] Down: <DOWN> (1:5)
+[INFO] Left: <LEFT> (2:6)
+[INFO] Right: <RIGHT> (3:7)
+[INFO] Select: <SELECT> (9:2)
+[INFO] Start: <START> (8:3)
+[INFO] A Button: <A> (4:8)
+[INFO] B Button: <B> (5:0)
+[INFO] A Turbo: <NONE> (-1:9)
+[INFO] B Turbo: <NONE> (-1:1)
+[INFO] Prev. Palette: <NONE> (-1:10)
+[INFO] Next Palette: <NONE> (-1:11)
+---------------------------------
+[INFO] [Gambatte] MBC1 ROM loaded.
+[INFO] [Gambatte] rambanks: 0
+[INFO] [Gambatte] rombanks: 8
+[INFO] [Gambatte] Got internal game name: BUST A MOVE 2   .
+[INFO] aspect_ratio: 1.111111 (160x144) fps: 59.727501
+[INFO] Config_readOptions
+[INFO] Config_readOptions
+[INFO] Config_readControlsString
+[INFO] SND_init
+[INFO] SDL_OpenAudio error (pulse): Could not setup connection to PulseAudio
+[INFO] Current audio driver: alsa
+[INFO] sample rate: 32768 (req) 32768 (rec) [samples 512]
+[INFO] selectScaler
+[INFO] aspect: 0.000000

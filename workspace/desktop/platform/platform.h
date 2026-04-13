@@ -118,7 +118,7 @@
 
 ///////////////////////////////
 
-#define SDCARD_PATH "/tmp/minui_fake_sd"
+#define SDCARD_PATH "/mnt/minui_fake_sd"
 #define MUTE_VOLUME_RAW 0
 
 ///////////////////////////////

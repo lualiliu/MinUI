@@ -32,6 +32,7 @@ static int should_run_core = 1; // used by threaded video
 static pthread_t		core_pt;
 static pthread_mutex_t	core_mx;
 static pthread_cond_t	core_rq; // not sure this is required
+static int              frame_ready = 0;
 static SDL_Surface*	backbuffer = NULL;
 static void* coreThread(void *arg);
 
@@ -197,8 +198,9 @@ static void Game_open(char* path) {
 	LOG_info("Game_open\n");
 	memset(&game, 0, sizeof(game));
 	
-	strcpy((char*)game.path, path);
-	strcpy((char*)game.name, strrchr(path, '/')+1);
+	snprintf((char*)game.path, sizeof(game.path), "%s", path);
+	char* base_name = strrchr(path, '/');
+	snprintf((char*)game.name, sizeof(game.name), "%s", base_name ? base_name + 1 : path);
 	
 	// if we have a zip file
 	if (suffixMatch(".zip", game.path)) {
@@ -206,9 +208,9 @@ static void Game_open(char* path) {
 		int supports_zip = 0;
 		int i = 0;
 		char* ext;
-		char exts[128];
+		char exts[MAX_PATH];
 		char* extensions[32];
-		strcpy(exts,core.extensions);
+		snprintf(exts, sizeof(exts), "%s", core.extensions);
 		while ((ext=strtok(i?NULL:exts,"|"))) {
 			extensions[i++] = ext;
 			if (!strcmp("zip", ext)) {
@@ -232,7 +234,7 @@ static void Game_open(char* path) {
 			uint16_t len = 0;
 			char filename[MAX_PATH];
 			uint32_t compressed_size = 0;
-			char extension[8];
+			char extension[32];
 			while (1) {
 				if (next) fseek(zip, next, SEEK_CUR);
 				
@@ -254,7 +256,7 @@ static void Game_open(char* path) {
 				
 				int found = 0;
 				for (i=0; extensions[i]; i++) {
-					sprintf(extension, ".%s", extensions[i]);
+					snprintf(extension, sizeof(extension), ".%s", extensions[i]);
 					if (suffixMatch(extension, filename)) {
 						
 						found = 1;
@@ -267,7 +269,7 @@ static void Game_open(char* path) {
 				strcpy(tmp_template, "/tmp/minarch-XXXXXX");
 				char* tmp_dirname = mkdtemp(tmp_template);
 				// LOG_info("tmp_dirname: %s\n", tmp_dirname);
-				sprintf(game.tmp_path, "%s/%s", tmp_dirname, basename(filename));
+				snprintf(game.tmp_path, sizeof(game.tmp_path), "%s/%s", tmp_dirname, basename(filename));
 				
 				// TODO: we need to clear game.tmp_path if anything below this point fails!
 				
@@ -327,21 +329,21 @@ static void Game_open(char* path) {
 	
 	// m3u-based?
 	char* tmp;
-	char m3u_path[256];
-	char base_path[256];
-	char dir_name[256];
+	char m3u_path[MAX_PATH];
+	char base_path[MAX_PATH];
+	char dir_name[MAX_PATH];
 
-	strcpy(m3u_path, game.path);
+	snprintf(m3u_path, sizeof(m3u_path), "%s", game.path);
 	tmp = strrchr(m3u_path, '/') + 1;
 	tmp[0] = '\0';
 	
-	strcpy(base_path, m3u_path);
+	snprintf(base_path, sizeof(base_path), "%s", m3u_path);
 	
 	tmp = strrchr(m3u_path, '/');
 	tmp[0] = '\0';
 
 	tmp = strrchr(m3u_path, '/');
-	strcpy(dir_name, tmp);
+	snprintf(dir_name, sizeof(dir_name), "%s", tmp);
 	
 	tmp = m3u_path + strlen(m3u_path); 
 	strcpy(tmp, dir_name);
@@ -350,8 +352,8 @@ static void Game_open(char* path) {
 	strcpy(tmp, ".m3u");
 	
 	if (exists(m3u_path)) {
-		strcpy(game.m3u_path, m3u_path);
-		strcpy((char*)game.name, strrchr(m3u_path, '/')+1);
+		snprintf(game.m3u_path, sizeof(game.m3u_path), "%s", m3u_path);
+		snprintf((char*)game.name, sizeof(game.name), "%s", strrchr(m3u_path, '/')+1);
 	}
 	
 	game.is_open = 1;
@@ -648,6 +650,12 @@ static char* max_ff_labels[] = {
 	"8x",
 	NULL,
 };
+static char* audio_buffer_labels[] = {
+	"2 sec",
+	"5 sec",
+	"8 sec",
+	NULL,
+};
 
 ///////////////////////////////
 
@@ -658,6 +666,7 @@ enum {
 	FE_OPT_TEARING,
 	FE_OPT_OVERCLOCK,
 	FE_OPT_THREAD,
+	FE_OPT_AUDIO_BUFFER,
 	FE_OPT_DEBUG,
 	FE_OPT_MAXFF,
 	FE_OPT_COUNT,
@@ -898,6 +907,16 @@ static struct Config {
 				.values = onoff_labels,
 				.labels = onoff_labels,
 			},
+			[FE_OPT_AUDIO_BUFFER] = {
+				.key	= "minarch_audio_buffer_size",
+				.name	= "Audio Buffer",
+				.desc	= "Larger buffers reduce crackle on slow cores\nbut increase audio latency.",
+				.default_value = 1,
+				.value = 1,
+				.count = 3,
+				.values = audio_buffer_labels,
+				.labels = audio_buffer_labels,
+			},
 			[FE_OPT_DEBUG] = {
 				.key	= "minarch_debug_hud",
 				.name	= "Debug HUD",
@@ -1004,6 +1023,13 @@ static void Config_syncFrontend(char* key, int value) {
 		toggle_thread = old_value!=value;
 		i = FE_OPT_THREAD;
 	}
+	else if (exactMatch(key,config.frontend.options[FE_OPT_AUDIO_BUFFER].key)) {
+		static int audio_buffer_seconds[] = {2, 5, 8};
+		if (value < 0) value = 0;
+		if (value > 2) value = 2;
+		SND_setBufferSeconds(audio_buffer_seconds[value]);
+		i = FE_OPT_AUDIO_BUFFER;
+	}
 	else if (exactMatch(key,config.frontend.options[FE_OPT_OVERCLOCK].key)) {
 		overclock = value;
 		i = FE_OPT_OVERCLOCK;
@@ -1027,9 +1053,9 @@ enum {
 };
 static void Config_getPath(char* filename, int override) {
 	char device_tag[64] = {0};
-	if (config.device_tag) sprintf(device_tag,"-%s",config.device_tag);
-	if (override) sprintf(filename, "%s/%s%s.cfg", core.config_dir, game.name, device_tag);
-	else sprintf(filename, "%s/minarch%s.cfg", core.config_dir, device_tag);
+	if (config.device_tag) snprintf(device_tag, sizeof(device_tag), "-%s", config.device_tag);
+	if (override) snprintf(filename, MAX_PATH, "%s/%s%s.cfg", core.config_dir, game.name, device_tag);
+	else snprintf(filename, MAX_PATH, "%s/minarch%s.cfg", core.config_dir, device_tag);
 	LOG_info("Config_getPath %s\n", filename);
 }
 static void Config_init(void) {
@@ -1207,7 +1233,7 @@ static void Config_load(void) {
 	char* system_path = SYSTEM_PATH "/system.cfg";
 	
 	char device_system_path[MAX_PATH] = {0};
-	if (config.device_tag) sprintf(device_system_path, SYSTEM_PATH "/system-%s.cfg", config.device_tag);
+	if (config.device_tag) snprintf(device_system_path, sizeof(device_system_path), SYSTEM_PATH "/system-%s.cfg", config.device_tag);
 	
 	if (config.device_tag && exists(device_system_path)) {
 		LOG_info("usng device_system_path: %s\n", device_system_path);
@@ -1228,7 +1254,7 @@ static void Config_load(void) {
 		getEmuPath((char *)core.tag, device_default_path);
 		tmp = strrchr(device_default_path, '/');
 		char filename[64];
-		sprintf(filename,"/default-%s.cfg", config.device_tag);
+		snprintf(filename, sizeof(filename), "/default-%s.cfg", config.device_tag);
 		strcpy(tmp,filename);
 	}
 	
@@ -1315,14 +1341,14 @@ static void Config_write(int override) {
 static void Config_restore(void) {
 	char path[MAX_PATH];
 	if (config.loaded==CONFIG_GAME) {
-		if (config.device_tag) sprintf(path, "%s/%s-%s.cfg", core.config_dir, game.name, config.device_tag);
-		else sprintf(path, "%s/%s.cfg", core.config_dir, game.name);
+		if (config.device_tag) snprintf(path, sizeof(path), "%s/%s-%s.cfg", core.config_dir, game.name, config.device_tag);
+		else snprintf(path, sizeof(path), "%s/%s.cfg", core.config_dir, game.name);
 		unlink(path);
 		LOG_info("deleted game config: %s\n", path);
 	}
 	else if (config.loaded==CONFIG_CONSOLE) {
-		if (config.device_tag) sprintf(path, "%s/minarch-%s.cfg", core.config_dir, config.device_tag);
-		else sprintf(path, "%s/minarch.cfg", core.config_dir);
+		if (config.device_tag) snprintf(path, sizeof(path), "%s/minarch-%s.cfg", core.config_dir, config.device_tag);
+		else snprintf(path, sizeof(path), "%s/minarch.cfg", core.config_dir);
 		unlink(path);
 		LOG_info("deleted console config: %s\n", path);
 	}
@@ -1739,6 +1765,7 @@ static void input_poll_callback(void) {
 		if (thread_video) {
 			pthread_mutex_lock(&core_mx);
 			should_run_core = 0;
+			pthread_cond_signal(&core_rq);
 			pthread_mutex_unlock(&core_mx);
 		}
 	}
@@ -2864,6 +2891,7 @@ static void video_refresh_callback(const void *data, unsigned width, unsigned he
 		
 		memcpy(backbuffer->pixels, data, backbuffer->h*backbuffer->pitch);
 		
+		frame_ready = 1;
 		pthread_cond_signal(&core_rq);
 		pthread_mutex_unlock(&core_mx);
 	}
@@ -4734,6 +4762,7 @@ int main(int argc , char* argv[]) {
 	if (thread_video) {
 		core_mx = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 		core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+		frame_ready = 0;
 		pthread_create(&core_pt, NULL, &coreThread, NULL);
 	}
 	
@@ -4759,13 +4788,13 @@ int main(int argc , char* argv[]) {
 
 		if (thread_video && !quit) {
 			pthread_mutex_lock(&core_mx);
-			pthread_cond_wait(&core_rq,&core_mx);
+			while (!frame_ready && !show_menu && !quit) pthread_cond_wait(&core_rq,&core_mx);
 			
-			if (backbuffer) {
+			if (frame_ready && backbuffer) {
 				video_refresh_callback_main(backbuffer->pixels,backbuffer->w,backbuffer->h,backbuffer->pitch);
 				GFX_flip(screen);
+				frame_ready = 0;
 			}
-			core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 			pthread_mutex_unlock(&core_mx);
 		}
 		
@@ -4785,6 +4814,7 @@ int main(int argc , char* argv[]) {
 				// enable
 				core_mx = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 				core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+				frame_ready = 0;
 				pthread_create(&core_pt, NULL, &coreThread, NULL);
 			}
 			else {

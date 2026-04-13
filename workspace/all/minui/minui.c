@@ -983,6 +983,16 @@ static char* escapeSingleQuotes(char* str) {
 	replaceString(str, "'", "'\\''");
 	return str;
 }
+static void getLaunchCmd(char* cmd, size_t cmd_size, char* script_path, char* rom_path) {
+	if (exists("/bin/bash")) {
+		if (rom_path) snprintf(cmd, cmd_size, "'/bin/bash' '%s' '%s'", escapeSingleQuotes(script_path), escapeSingleQuotes(rom_path));
+		else snprintf(cmd, cmd_size, "'/bin/bash' '%s'", escapeSingleQuotes(script_path));
+	}
+	else {
+		if (rom_path) snprintf(cmd, cmd_size, "'%s' '%s'", escapeSingleQuotes(script_path), escapeSingleQuotes(rom_path));
+		else snprintf(cmd, cmd_size, "'%s'", escapeSingleQuotes(script_path));
+	}
+}
 
 ///////////////////////////////////////
 
@@ -1056,8 +1066,8 @@ static int autoResume(void) {
 	
 	// putFile(LAST_PATH, FAUX_RECENT_PATH); // saveLast() will crash here because top is NULL
 	
-	char cmd[256];
-	sprintf(cmd, "'%s' '%s'", escapeSingleQuotes(emu_path), escapeSingleQuotes(sd_path));
+	char cmd[512];
+	getLaunchCmd(cmd, sizeof(cmd), emu_path, sd_path);
 	putInt(RESUME_SLOT_PATH, AUTO_RESUME_SLOT);
 	queueNext(cmd);
 	return 1;
@@ -1071,8 +1081,10 @@ static void openPak(char* path) {
 	}
 	saveLast(path);
 	
-	char cmd[256];
-	sprintf(cmd, "'%s/launch.sh'", escapeSingleQuotes(path));
+	char script_path[256];
+	snprintf(script_path, sizeof(script_path), "%s/launch.sh", path);
+	char cmd[512];
+	getLaunchCmd(cmd, sizeof(cmd), script_path, NULL);
 	queueNext(cmd);
 }
 static void openRom(char* path, char* last) {
@@ -1131,8 +1143,8 @@ static void openRom(char* path, char* last) {
 	addRecent(recent_path, recent_alias); // yiiikes
 	saveLast(last==NULL ? sd_path : last);
 	
-	char cmd[256];
-	sprintf(cmd, "'%s' '%s'", escapeSingleQuotes(emu_path), escapeSingleQuotes(sd_path));
+	char cmd[512];
+	getLaunchCmd(cmd, sizeof(cmd), emu_path, sd_path);
 	queueNext(cmd);
 }
 static void openDirectory(char* path, int auto_launch) {
