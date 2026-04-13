@@ -54,6 +54,7 @@ void PLAT_quitInput(void) {
 
 static struct VID_Context {
 	SDL_Surface* screen;
+	SDL_Surface* canvas;
 	GFX_Renderer* renderer;
 } vid;
 
@@ -61,25 +62,32 @@ SDL_Surface* PLAT_initVideo(void) {
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_ShowCursor(0);
 	
-	// Use SDL_SWSURFACE to ensure pitch matches FIXED_PITCH exactly
-	// SDL_HWSURFACE may have different pitch due to hardware alignment requirements
-	vid.screen = SDL_SetVideoMode(FIXED_WIDTH, FIXED_HEIGHT, FIXED_DEPTH, SDL_SWSURFACE | SDL_DOUBLEBUF);
+	// screen: actual output framebuffer (portrait)
+	vid.screen = SDL_SetVideoMode(DISPLAY_WIDTH, DISPLAY_HEIGHT, FIXED_DEPTH, SDL_SWSURFACE | SDL_DOUBLEBUF);
 	if (!vid.screen) {
 		fprintf(stderr, "Failed to create video mode: %s\n", SDL_GetError());
 		exit(1);
 	}
+
+	// canvas: logical render target (landscape), rotated when presenting
+	vid.canvas = SDL_CreateRGBSurface(SDL_SWSURFACE, FIXED_WIDTH, FIXED_HEIGHT, FIXED_DEPTH, 0, 0, 0, 0);
+	if (!vid.canvas) {
+		fprintf(stderr, "Failed to create render surface: %s\n", SDL_GetError());
+		exit(1);
+	}
 	
-	PLAT_clearVideo(vid.screen);
+	PLAT_clearVideo(vid.canvas);
 	
-	return vid.screen;
+	return vid.canvas;
 }
 
 void PLAT_quitVideo(void) {
+	if (vid.canvas) SDL_FreeSurface(vid.canvas);
 	SDL_Quit();
 }
 
 void PLAT_clearVideo(SDL_Surface* IGNORED) {
-	SDL_FillRect(vid.screen, NULL, 0);
+	if (vid.canvas) SDL_FillRect(vid.canvas, NULL, 0);
 }
 
 void PLAT_clearAll(void) {
@@ -92,7 +100,7 @@ void PLAT_setVsync(int vsync) {
 
 SDL_Surface* PLAT_resizeVideo(int w, int h, int pitch) {
 	PLAT_clearVideo(vid.screen);
-	return vid.screen;
+	return vid.canvas;
 }
 
 void PLAT_setVideoScaleClip(int x, int y, int width, int height) {
@@ -673,11 +681,30 @@ void PLAT_blitRenderer(GFX_Renderer* renderer) {
 	if (center_x < 0) center_x = 0;
 	if (center_y < 0) center_y = 0;
 	
-	void* dst = renderer->dst + (center_y * vid.screen->pitch) + (center_x * FIXED_BPP);
-	blit_func(src,dst,renderer->src_w,renderer->src_h,renderer->src_p,dst_w,dst_h,vid.screen->pitch);
+	void* dst = renderer->dst + (center_y * vid.canvas->pitch) + (center_x * FIXED_BPP);
+	blit_func(src,dst,renderer->src_w,renderer->src_h,renderer->src_p,dst_w,dst_h,vid.canvas->pitch);
+}
+
+static inline void rotate_90_cw_16bpp(SDL_Surface* src, SDL_Surface* dst) {
+	if (!src || !dst) return;
+	if (dst->w != src->h || dst->h != src->w) return;
+
+	int src_pitch = src->pitch / FIXED_BPP;
+	int dst_pitch = dst->pitch / FIXED_BPP;
+	uint16_t* src_pixels = (uint16_t*)src->pixels;
+	uint16_t* dst_pixels = (uint16_t*)dst->pixels;
+
+	for (int y = 0; y < src->h; y++) {
+		for (int x = 0; x < src->w; x++) {
+			int dx = src->h - 1 - y;
+			int dy = x;
+			dst_pixels[dy * dst_pitch + dx] = src_pixels[y * src_pitch + x];
+		}
+	}
 }
 
 void PLAT_flip(SDL_Surface* IGNORED, int sync) {
+	rotate_90_cw_16bpp(vid.canvas, vid.screen);
 	SDL_Flip(vid.screen);
 }
 
