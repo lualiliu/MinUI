@@ -66,30 +66,37 @@
 
 ///////////////////////////////
 
-#define JOY_UP			JOY_NA
-#define JOY_DOWN		JOY_NA
-#define JOY_LEFT		JOY_NA
-#define JOY_RIGHT		JOY_NA
+#define JOY_UP			11
+#define JOY_DOWN		12
+#define JOY_LEFT		13
+#define JOY_RIGHT		14
 
-#define JOY_SELECT		JOY_NA
-#define JOY_START		JOY_NA
+#define JOY_SELECT		6
+#define JOY_START		7
 
-#define JOY_A			JOY_NA
-#define JOY_B			JOY_NA
-#define JOY_X			JOY_NA
-#define JOY_Y			JOY_NA
+#define JOY_A			0
+#define JOY_B			1
+#define JOY_X			2
+#define JOY_Y			3
 
-#define JOY_L1			JOY_NA
-#define JOY_R1			JOY_NA
+#define JOY_L1			4
+#define JOY_R1			5
 #define JOY_L2			JOY_NA
 #define JOY_R2			JOY_NA
-#define JOY_L3			JOY_NA
-#define JOY_R3			JOY_NA
+#define JOY_L3			9
+#define JOY_R3			10
 
-#define JOY_MENU		JOY_NA
+#define JOY_MENU		8
 #define JOY_POWER		JOY_NA
-#define JOY_PLUS		JOY_NA
-#define JOY_MINUS		JOY_NA
+#define JOY_PLUS		JOY_START
+#define JOY_MINUS		JOY_SELECT
+
+#define AXIS_L2			2
+#define AXIS_R2			5
+#define AXIS_LX			0
+#define AXIS_LY			1
+#define AXIS_RX			3
+#define AXIS_RY			4
 
 ///////////////////////////////
 
@@ -120,7 +127,7 @@
 
 ///////////////////////////////
 
-#define SDCARD_PATH "/mnt/minui_fake_sd"
+#define SDCARD_PATH "/mnt/sdcard"
 #define MUTE_VOLUME_RAW 0
 
 ///////////////////////////////

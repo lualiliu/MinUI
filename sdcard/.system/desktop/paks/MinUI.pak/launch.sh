@@ -1,7 +1,7 @@
 #!/bin/sh
 
 export PLATFORM="desktop"
-export SDCARD_PATH="/mnt/minui_fake_sd"
+export SDCARD_PATH="/mnt/sdcard"
 export BIOS_PATH="$SDCARD_PATH/Bios"
 export SAVES_PATH="$SDCARD_PATH/Saves"
 export SYSTEM_PATH="$SDCARD_PATH/.system/$PLATFORM"

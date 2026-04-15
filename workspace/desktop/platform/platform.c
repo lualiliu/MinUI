@@ -42,12 +42,20 @@ void SetMute(int value) {}
 
 ///////////////////////////////
 
+static SDL_Joystick* joystick = NULL;
 void PLAT_initInput(void) {
-	// buh
+	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+	if (SDL_NumJoysticks()>0) {
+		joystick = SDL_JoystickOpen(0);
+	}
 }
 
 void PLAT_quitInput(void) {
-	// buh
+	if (joystick) {
+		SDL_JoystickClose(joystick);
+		joystick = NULL;
+	}
+	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
 }
 
 ///////////////////////////////
