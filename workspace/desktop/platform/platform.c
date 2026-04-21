@@ -74,33 +74,43 @@ void SetMute(int value) {}
 static SDL_Joystick* joystick = NULL;
 static int joystick_count = -1;
 static uint32_t joystick_scan_at = 0;
+static int joystick_index = -1;
+
+static void PLAT_resetJoystickSubsystem(void) {
+	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+}
 
 static void PLAT_closeJoystick(void) {
 	if (joystick) {
 		SDL_JoystickClose(joystick);
 		joystick = NULL;
+		joystick_index = -1;
 	}
 }
 
 static void PLAT_openJoystick(int device_index) {
-	if (device_index < 0 || device_index >= SDL_NumJoysticks()) return;
+	int count = SDL_NumJoysticks();
+	if (device_index < 0 || device_index >= count) return;
 	PLAT_closeJoystick();
 	joystick = SDL_JoystickOpen(device_index);
+	if (joystick) joystick_index = device_index;
 }
 
 static void PLAT_refreshJoystickHotplug(int force) {
 	uint32_t now = SDL_GetTicks();
 	if (!force && now < joystick_scan_at) return;
-	joystick_scan_at = now + 500;
+	joystick_scan_at = now + 1000;
 	
+	// SDL 1.2 usually won't notice runtime plug/unplug unless subsystem is reset.
+	PLAT_closeJoystick();
+	PLAT_resetJoystickSubsystem();
+
 	int count = SDL_NumJoysticks();
 	if (count < 0) count = 0;
 	
-	if (force || count != joystick_count) {
-		joystick_count = count;
-		if (count <= 0) PLAT_closeJoystick();
-		else PLAT_openJoystick(0);
-	}
+	joystick_count = count;
+	if (count > 0) PLAT_openJoystick(0);
 }
 
 void PLAT_initInput(void) {
@@ -189,6 +199,7 @@ void PLAT_setEffect(int effect) {
 }
 
 void PLAT_vsync(int remaining) {
+	PLAT_refreshJoystickHotplug(0);
 	if (remaining>0) SDL_Delay(remaining);
 }
 
@@ -769,7 +780,6 @@ static inline void rotate_90_cw_16bpp(SDL_Surface* src, SDL_Surface* dst) {
 }
 
 void PLAT_flip(SDL_Surface* IGNORED, int sync) {
-	PLAT_refreshJoystickHotplug(0);
 	rotate_90_cw_16bpp(vid.canvas, vid.screen);
 	SDL_Flip(vid.screen);
 }
