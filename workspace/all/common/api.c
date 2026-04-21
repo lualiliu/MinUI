@@ -91,11 +91,19 @@ static struct PWR_Context {
 static int _;
 
 SDL_Surface* GFX_init(int mode) {
+	LOG_info("GFX_init: begin\n");
 	// TODO: this doesn't really belong here...
 	// tried adding to PWR_init() but that was no good (not sure why)
+	LOG_info("GFX_init: init lid\n");
 	PLAT_initLid();
 	
+	LOG_info("GFX_init: init video\n");
 	gfx.screen = PLAT_initVideo();
+	if (!gfx.screen || !gfx.screen->format) {
+		LOG_error("GFX_init: PLAT_initVideo failed (screen=%p)\n", gfx.screen);
+		return NULL;
+	}
+	LOG_info("GFX_init: video ready (%ix%i)\n", gfx.screen->w, gfx.screen->h);
 	gfx.vsync = VSYNC_STRICT;
 	gfx.mode = mode;
 	
@@ -150,19 +158,28 @@ SDL_Surface* GFX_init(int mode) {
 	sprintf(asset_path, RES_PATH "/assets@%ix.png", FIXED_SCALE);
 	LOG_info(RES_PATH);
 	if (!exists(asset_path)) LOG_info("missing assets, you're about to segfault dummy!\n");
+	LOG_info("GFX_init: load assets %s\n", asset_path);
 	gfx.assets = IMG_Load(asset_path);
+	if (!gfx.assets) {
+		LOG_error("GFX_init: IMG_Load failed for %s\n", asset_path);
+	}
 	
+	LOG_info("GFX_init: init ttf\n");
 	TTF_Init();
 	font.large 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_LARGE));
 	font.medium = TTF_OpenFont(FONT_PATH, SCALE1(FONT_MEDIUM));
 	font.small 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_SMALL));
 	font.tiny 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_TINY));
+	if (!font.large || !font.medium || !font.small || !font.tiny) {
+		LOG_error("GFX_init: failed to load one or more fonts from %s\n", FONT_PATH);
+	}
 	
 	TTF_SetFontStyle(font.large, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.medium, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.small, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.tiny, TTF_STYLE_BOLD);
 	
+	LOG_info("GFX_init: done\n");
 	return gfx.screen;
 }
 void GFX_quit(void) {

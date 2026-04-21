@@ -22,13 +22,42 @@
 void InitSettings(void){}
 void QuitSettings(void){}
 
-int GetBrightness(void) { return 5; }
+#define DESKTOP_BRIGHTNESS_PATH "/sys/class/leds/lcd_backlight0/brightness"
+#define BRIGHTNESS_MIN_LEVEL 0
+#define BRIGHTNESS_MAX_LEVEL 10
+#define BRIGHTNESS_MAX_RAW 255
+#define DESKTOP_BATTERY_CAPACITY_PATH "/sys/class/power_supply/Battery/capacity"
+#define DESKTOP_BATTERY_STATUS_PATH "/sys/class/power_supply/Battery/status"
+
+static int desktop_brightness_level = 5;
+
+int GetBrightness(void) {
+	int raw = getInt(DESKTOP_BRIGHTNESS_PATH);
+	if (raw < 0) return desktop_brightness_level;
+	if (raw > BRIGHTNESS_MAX_RAW) raw = BRIGHTNESS_MAX_RAW;
+	
+	int level = (raw * BRIGHTNESS_MAX_LEVEL + (BRIGHTNESS_MAX_RAW / 2)) / BRIGHTNESS_MAX_RAW;
+	if (level < BRIGHTNESS_MIN_LEVEL) level = BRIGHTNESS_MIN_LEVEL;
+	if (level > BRIGHTNESS_MAX_LEVEL) level = BRIGHTNESS_MAX_LEVEL;
+	desktop_brightness_level = level;
+	return desktop_brightness_level;
+}
 int GetVolume(void) { return 10; }
 
-void SetRawBrightness(int value) {}
+void SetRawBrightness(int value) {
+	if (value < 0) value = 0;
+	if (value > BRIGHTNESS_MAX_RAW) value = BRIGHTNESS_MAX_RAW;
+	putInt(DESKTOP_BRIGHTNESS_PATH, value);
+}
 void SetRawVolume(int value){}
 
-void SetBrightness(int value) {}
+void SetBrightness(int value) {
+	if (value < BRIGHTNESS_MIN_LEVEL) value = BRIGHTNESS_MIN_LEVEL;
+	if (value > BRIGHTNESS_MAX_LEVEL) value = BRIGHTNESS_MAX_LEVEL;
+	desktop_brightness_level = value;
+	int raw = (value * BRIGHTNESS_MAX_RAW) / BRIGHTNESS_MAX_LEVEL;
+	SetRawBrightness(raw);
+}
 void SetVolume(int value) {}
 
 int GetJack(void) { return 0; }
@@ -43,18 +72,46 @@ void SetMute(int value) {}
 ///////////////////////////////
 
 static SDL_Joystick* joystick = NULL;
-void PLAT_initInput(void) {
-	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
-	if (SDL_NumJoysticks()>0) {
-		joystick = SDL_JoystickOpen(0);
-	}
-}
+static int joystick_count = -1;
+static uint32_t joystick_scan_at = 0;
 
-void PLAT_quitInput(void) {
+static void PLAT_closeJoystick(void) {
 	if (joystick) {
 		SDL_JoystickClose(joystick);
 		joystick = NULL;
 	}
+}
+
+static void PLAT_openJoystick(int device_index) {
+	if (device_index < 0 || device_index >= SDL_NumJoysticks()) return;
+	PLAT_closeJoystick();
+	joystick = SDL_JoystickOpen(device_index);
+}
+
+static void PLAT_refreshJoystickHotplug(int force) {
+	uint32_t now = SDL_GetTicks();
+	if (!force && now < joystick_scan_at) return;
+	joystick_scan_at = now + 500;
+	
+	int count = SDL_NumJoysticks();
+	if (count < 0) count = 0;
+	
+	if (force || count != joystick_count) {
+		joystick_count = count;
+		if (count <= 0) PLAT_closeJoystick();
+		else PLAT_openJoystick(0);
+	}
+}
+
+void PLAT_initInput(void) {
+	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+	PLAT_refreshJoystickHotplug(1);
+}
+
+void PLAT_quitInput(void) {
+	joystick_count = -1;
+	joystick_scan_at = 0;
+	PLAT_closeJoystick();
 	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
 }
 
@@ -71,7 +128,7 @@ SDL_Surface* PLAT_initVideo(void) {
 	SDL_ShowCursor(0);
 	
 	// screen: actual output framebuffer (portrait)
-	vid.screen = SDL_SetVideoMode(DISPLAY_WIDTH, DISPLAY_HEIGHT, FIXED_DEPTH, SDL_SWSURFACE | SDL_DOUBLEBUF);
+	vid.screen = SDL_SetVideoMode(DISPLAY_WIDTH, DISPLAY_HEIGHT, FIXED_DEPTH, SDL_SWSURFACE);
 	if (!vid.screen) {
 		fprintf(stderr, "Failed to create video mode: %s\n", SDL_GetError());
 		exit(1);
@@ -712,6 +769,7 @@ static inline void rotate_90_cw_16bpp(SDL_Surface* src, SDL_Surface* dst) {
 }
 
 void PLAT_flip(SDL_Surface* IGNORED, int sync) {
+	PLAT_refreshJoystickHotplug(0);
 	rotate_90_cw_16bpp(vid.canvas, vid.screen);
 	SDL_Flip(vid.screen);
 }
@@ -746,13 +804,21 @@ void PLAT_enableOverlay(int enable) {
 static int online = 1;
 
 void PLAT_getBatteryStatus(int* is_charging, int* charge) {
-	*is_charging = 1;
-	*charge = 100;
-	return;
+	char status[64] = {0};
+	int capacity = getInt(DESKTOP_BATTERY_CAPACITY_PATH);
+	
+	getFile(DESKTOP_BATTERY_STATUS_PATH, status, sizeof(status));
+	trimTrailingNewlines(status);
+	
+	*is_charging = exactMatch(status, "Charging") || exactMatch(status, "Full");
+	
+	if (capacity < 0) capacity = 100;
+	if (capacity > 100) capacity = 100;
+	*charge = capacity;
 }
 
 void PLAT_enableBacklight(int enable) {
-	// buh
+	SetRawBrightness(enable ? BRIGHTNESS_MAX_RAW : 0);
 }
 
 void PLAT_powerOff(void) {
@@ -782,7 +848,8 @@ char* PLAT_getModel(void) {
 }
 
 int PLAT_isOnline(void) {
-	return online;
+	//return online;
+	return 0;
 }
 
 int PLAT_supportsOverscan(void) {
