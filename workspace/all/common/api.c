@@ -997,6 +997,7 @@ static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // pla
 	}
 }
 static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
+	if (!snd.initialized) return;
 	snd.frame_count = snd.buffer_seconds * snd.sample_rate_in / snd.frame_rate;
 	if (snd.frame_count==0) return;
 	
@@ -1059,6 +1060,7 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	
 	// return frame_count; // TODO: tmp, silent
 	
+	if (!snd.initialized) return frame_count;
 	if (snd.frame_count==0) return 0;
 	
 	// LOG_info("%8i batching samples (%i frames)\n", ms(), frame_count);
@@ -1158,6 +1160,7 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 		LOG_warn("Audio disabled: failed to initialize backend\n");
 		return;
 	}
+	snd.initialized = 1;
 	
 	snd.buffer_seconds = snd_buffer_seconds_pref;
 	snd.sample_rate_in  = sample_rate;
@@ -1169,7 +1172,6 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	SDL_PauseAudio(0);
 
 	LOG_info("sample rate: %i (req) %i (rec) [samples %i]\n", snd.sample_rate_in, snd.sample_rate_out, SAMPLES);
-	snd.initialized = 1;
 }
 void SND_quit(void) { // plat_sound_finish
 	if (!snd.initialized) return;
@@ -1181,6 +1183,8 @@ void SND_quit(void) { // plat_sound_finish
 		free(snd.buffer);
 		snd.buffer = NULL;
 	}
+	snd.initialized = 0;
+	snd.frame_count = 0;
 }
 
 ///////////////////////////////
@@ -1708,7 +1712,7 @@ void PWR_powerOff(void) {
 }
 
 static void PWR_enterSleep(void) {
-	SDL_PauseAudio(1);
+	if (snd.initialized) SDL_PauseAudio(1);
 	if (GetHDMI()) {
 		PLAT_clearVideo(gfx.screen);
 		PLAT_flip(gfx.screen, 0);
@@ -1730,7 +1734,7 @@ static void PWR_exitSleep(void) {
 		PLAT_enableBacklight(1);
 		SetVolume(GetVolume());
 	}
-	SDL_PauseAudio(0);
+	if (snd.initialized) SDL_PauseAudio(0);
 	
 	sync();
 }

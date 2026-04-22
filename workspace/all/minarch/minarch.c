@@ -34,6 +34,7 @@ static pthread_mutex_t	core_mx;
 static pthread_cond_t	core_rq; // not sure this is required
 static int              frame_ready = 0;
 static SDL_Surface*	backbuffer = NULL;
+static int              core_thread_started = 0;
 static void* coreThread(void *arg);
 
 enum {
@@ -83,6 +84,8 @@ static struct Core {
 	double fps;
 	double sample_rate;
 	double aspect_ratio;
+	int memory_ready;
+	int pending_memory_restore;
 	
 	void* handle;
 	void (*init)(void);
@@ -388,6 +391,7 @@ static void SRAM_getPath(char* filename) {
 	sprintf(filename, "%s/%s.sav", core.saves_dir, game.name);
 }
 static void SRAM_read(void) {
+	if (!core.get_memory_size || !core.get_memory_data) return;
 	size_t sram_size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if (!sram_size) return;
 	
@@ -407,6 +411,7 @@ static void SRAM_read(void) {
 	fclose(sram_file);
 }
 static void SRAM_write(void) {
+	if (!core.get_memory_size || !core.get_memory_data) return;
 	size_t sram_size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if (!sram_size) return;
 	
@@ -437,6 +442,7 @@ static void RTC_getPath(char* filename) {
 	sprintf(filename, "%s/%s.rtc", core.saves_dir, game.name);
 }
 static void RTC_read(void) {
+	if (!core.get_memory_size || !core.get_memory_data) return;
 	size_t rtc_size = core.get_memory_size(RETRO_MEMORY_RTC);
 	if (!rtc_size) return;
 	
@@ -456,6 +462,7 @@ static void RTC_read(void) {
 	fclose(rtc_file);
 }
 static void RTC_write(void) {
+	if (!core.get_memory_size || !core.get_memory_data) return;
 	size_t rtc_size = core.get_memory_size(RETRO_MEMORY_RTC);
 	if (!rtc_size) return;
 	
@@ -2909,6 +2916,13 @@ static size_t audio_sample_batch_callback(const int16_t *data, size_t frames) {
 	// return frames;
 };
 
+static void Core_tryRestoreMemory(void) {
+	if (!core.pending_memory_restore || !core.memory_ready) return;
+	core.pending_memory_restore = 0;
+	SRAM_read();
+	RTC_read();
+}
+
 ///////////////////////////////////////
 
 void Core_getName(char* in_name, char* out_name) {
@@ -2995,10 +3009,13 @@ void Core_load(void) {
 	game_info.size = game.size;
 	LOG_info("game path: %s (%i)\n", game_info.path, game.size);
 	
-	core.load_game(&game_info);
-	
-	SRAM_read();
-	RTC_read();
+	if (!core.load_game(&game_info)) {
+		LOG_error("Failed to load game in core: %s\n", game_info.path);
+		quit = 1;
+		return;
+	}
+	core.memory_ready = 0;
+	core.pending_memory_restore = 1;
 	
 	// NOTE: must be called after core.load_game!
 	struct retro_system_av_info av_info = {};
@@ -3021,8 +3038,10 @@ void Core_unload(void) {
 }
 void Core_quit(void) {
 	if (core.initialized) {
-		SRAM_write();
-		RTC_write();
+		if (core.memory_ready) {
+			SRAM_write();
+			RTC_write();
+		}
 		core.unload_game();
 		core.deinit();
 		core.initialized = 0;
@@ -4687,6 +4706,8 @@ static void* coreThread(void *arg) {
 		
 		if (run) {
 			core.run();
+			core.memory_ready = 1;
+			Core_tryRestoreMemory();
 			limitFF();
 			trackFPS();
 		}
@@ -4764,6 +4785,7 @@ int main(int argc , char* argv[]) {
 		core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 		frame_ready = 0;
 		pthread_create(&core_pt, NULL, &coreThread, NULL);
+		core_thread_started = 1;
 	}
 	
 	PWR_warn(1);
@@ -4782,6 +4804,8 @@ int main(int argc , char* argv[]) {
 		
 		if (!thread_video) {
 			core.run();
+			core.memory_ready = 1;
+			Core_tryRestoreMemory();
 			limitFF();
 			trackFPS();
 		}
@@ -4816,11 +4840,13 @@ int main(int argc , char* argv[]) {
 				core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 				frame_ready = 0;
 				pthread_create(&core_pt, NULL, &coreThread, NULL);
+				core_thread_started = 1;
 			}
 			else {
 				// disable
 				pthread_cancel(core_pt);
 				pthread_join(core_pt,NULL);
+				core_thread_started = 0;
 				
 				// force a vsync immediately before loop
 				// for better frame pacing?
@@ -4837,6 +4863,10 @@ int main(int argc , char* argv[]) {
 	QuitSettings();
 	
 finish:
+	if (core_thread_started) {
+		pthread_join(core_pt, NULL);
+		core_thread_started = 0;
+	}
 
 	Game_close();
 	Core_unload();

@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include <msettings.h>
 
@@ -73,8 +74,47 @@ void SetMute(int value) {}
 
 static SDL_Joystick* joystick = NULL;
 static int joystick_count = -1;
+static int joystick_probe_count = -1;
 static uint32_t joystick_scan_at = 0;
+static uint32_t joystick_force_rescan_at = 0;
 static int joystick_index = -1;
+#define JOYSTICK_SCAN_INTERVAL_ACTIVE_MS 8000
+#define JOYSTICK_SCAN_INTERVAL_IDLE_MS 8000
+#define JOYSTICK_FORCE_RESCAN_INTERVAL_MS 30000
+
+static int PLAT_countJoystickDevices(void) {
+	DIR* dir = opendir("/dev/input");
+	if (!dir) return -1;
+
+	int count = 0;
+	struct dirent* entry = NULL;
+	while ((entry = readdir(dir)) != NULL) {
+		if (strncmp(entry->d_name, "js", 2) != 0) continue;
+		char* end = NULL;
+		long idx = strtol(entry->d_name + 2, &end, 10);
+		if (end && *end == '\0' && idx >= 0) count++;
+	}
+
+	closedir(dir);
+	return count;
+}
+
+static int PLAT_countEventDevices(void) {
+	DIR* dir = opendir("/dev/input");
+	if (!dir) return -1;
+
+	int count = 0;
+	struct dirent* entry = NULL;
+	while ((entry = readdir(dir)) != NULL) {
+		if (strncmp(entry->d_name, "event", 5) != 0) continue;
+		char* end = NULL;
+		long idx = strtol(entry->d_name + 5, &end, 10);
+		if (end && *end == '\0' && idx >= 0) count++;
+	}
+
+	closedir(dir);
+	return count;
+}
 
 static void PLAT_resetJoystickSubsystem(void) {
 	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
@@ -100,16 +140,31 @@ static void PLAT_openJoystick(int device_index) {
 static void PLAT_refreshJoystickHotplug(int force) {
 	uint32_t now = SDL_GetTicks();
 	if (!force && now < joystick_scan_at) return;
-	joystick_scan_at = now + 1000;
-	
-	// SDL 1.2 usually won't notice runtime plug/unplug unless subsystem is reset.
+	uint32_t interval = joystick ? JOYSTICK_SCAN_INTERVAL_ACTIVE_MS : JOYSTICK_SCAN_INTERVAL_IDLE_MS;
+	joystick_scan_at = now + interval;
+
+	// 先做轻量级探测，优先检测 event 节点变化（旧内核兼容性更好）。
+	int event_count = PLAT_countEventDevices();
+	int js_count = PLAT_countJoystickDevices();
+	int probe_count = event_count;
+	if (probe_count < 0) probe_count = js_count;
+	if (probe_count < 0) probe_count = SDL_NumJoysticks();
+	if (probe_count < 0) probe_count = 0;
+
+	// 轻量检测可能在部分环境不可靠，定期执行一次完整重扫兜底。
+	int need_full_rescan = force || (probe_count != joystick_probe_count) || (now >= joystick_force_rescan_at);
+	if (!need_full_rescan) return;
+
+	// SDL 1.2 通常需要重置子系统才能识别热插拔变化。
 	PLAT_closeJoystick();
 	PLAT_resetJoystickSubsystem();
 
 	int count = SDL_NumJoysticks();
 	if (count < 0) count = 0;
-	
+
+	joystick_probe_count = probe_count;
 	joystick_count = count;
+	joystick_force_rescan_at = now + JOYSTICK_FORCE_RESCAN_INTERVAL_MS;
 	if (count > 0) PLAT_openJoystick(0);
 }
 
@@ -120,7 +175,9 @@ void PLAT_initInput(void) {
 
 void PLAT_quitInput(void) {
 	joystick_count = -1;
+	joystick_probe_count = -1;
 	joystick_scan_at = 0;
+	joystick_force_rescan_at = 0;
 	PLAT_closeJoystick();
 	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
 }
@@ -828,7 +885,7 @@ void PLAT_getBatteryStatus(int* is_charging, int* charge) {
 }
 
 void PLAT_enableBacklight(int enable) {
-	SetRawBrightness(enable ? BRIGHTNESS_MAX_RAW : 0);
+	return;
 }
 
 void PLAT_powerOff(void) {
