@@ -770,25 +770,38 @@ scaler_t PLAT_getScaler(GFX_Renderer* renderer) {
 
 void PLAT_blitRenderer(GFX_Renderer* renderer) {
 	void* src = renderer->src + (renderer->src_y * renderer->src_p) + (renderer->src_x * FIXED_BPP);
-	
-	// 计算等比例缩放，尽可能填满屏幕
-	// 计算水平和垂直方向的缩放比例，取较小的那个以保持宽高比
-	double scale_x = (double)FIXED_WIDTH / renderer->src_w;
-	double scale_y = (double)FIXED_HEIGHT / renderer->src_h;
-	double scale = (scale_x < scale_y) ? scale_x : scale_y; // 取较小的，确保不超出屏幕
-	
-	// 计算缩放后的尺寸
-	int dst_w = (int)(renderer->src_w * scale);
-	int dst_h = (int)(renderer->src_h * scale);
-	
-	// 确保尺寸不为零且不超过屏幕
-	if (dst_w <= 0) dst_w = 1;
-	if (dst_h <= 0) dst_h = 1;
-	if (dst_w > FIXED_WIDTH) dst_w = FIXED_WIDTH;
-	if (dst_h > FIXED_HEIGHT) dst_h = FIXED_HEIGHT;
+	int dst_w = FIXED_WIDTH;
+	int dst_h = FIXED_HEIGHT;
+	int center_x = 0;
+	int center_y = 0;
+
+	// aspect == -1 表示 Fullscreen 拉伸，直接铺满目标画布。
+	if (renderer->aspect != -1) {
+		// 计算等比例缩放，尽可能填满屏幕
+		double scale_x = (double)FIXED_WIDTH / renderer->src_w;
+		double scale_y = (double)FIXED_HEIGHT / renderer->src_h;
+		double scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+		// 计算缩放后的尺寸
+		dst_w = (int)(renderer->src_w * scale);
+		dst_h = (int)(renderer->src_h * scale);
+
+		// 确保尺寸不为零且不超过屏幕
+		if (dst_w <= 0) dst_w = 1;
+		if (dst_h <= 0) dst_h = 1;
+		if (dst_w > FIXED_WIDTH) dst_w = FIXED_WIDTH;
+		if (dst_h > FIXED_HEIGHT) dst_h = FIXED_HEIGHT;
+
+		// 计算居中偏移
+		center_x = (FIXED_WIDTH - dst_w) / 2;
+		center_y = (FIXED_HEIGHT - dst_h) / 2;
+		if (center_x < 0) center_x = 0;
+		if (center_y < 0) center_y = 0;
+	}
 	
 	// 如果缩放比例不是整数倍，需要使用抗锯齿缩放器
 	// 检查是否需要重新选择缩放器
+	double scale = (double)dst_w / renderer->src_w;
 	int scale_int = (int)(scale + 0.5); // 四舍五入到最近的整数
 	double scale_diff = scale - scale_int;
 	scaler_t blit_func = renderer->blit;
@@ -805,15 +818,7 @@ void PLAT_blitRenderer(GFX_Renderer* renderer) {
 		renderer->dst_w = old_dst_w;
 		renderer->dst_h = old_dst_h;
 	}
-	
-	// 计算居中偏移
-	int center_x = (FIXED_WIDTH - dst_w) / 2;
-	int center_y = (FIXED_HEIGHT - dst_h) / 2;
-	
-	// 确保居中位置不为负数
-	if (center_x < 0) center_x = 0;
-	if (center_y < 0) center_y = 0;
-	
+
 	void* dst = renderer->dst + (center_y * vid.canvas->pitch) + (center_x * FIXED_BPP);
 	blit_func(src,dst,renderer->src_w,renderer->src_h,renderer->src_p,dst_w,dst_h,vid.canvas->pitch);
 }
